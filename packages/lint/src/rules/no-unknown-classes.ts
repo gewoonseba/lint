@@ -13,7 +13,7 @@ import { unknownClasses } from "../tailwind/client"
 import { compileVocabularyPolicy, configErrorVisitors } from "./contracts"
 import { classSuggestions } from "./fixes"
 import { displayPath, fileOf, reporter } from "./messages"
-import { colorValueOf } from "./no-raw-colors"
+import { splitColorClass } from "./no-raw-colors"
 import { policySchema, recognitionSchema } from "./policy-schema"
 import { withSettings } from "./settings"
 
@@ -132,13 +132,19 @@ export const noUnknownClasses = {
     // CSS: an undeclared token or a near-miss of one is no-raw-colors'
     // finding, a typo of another utility (text-smal) is this rule's.
     // no-raw-colors applies the same test, so it is reported once.
-    let declared: ReturnType<typeof colorTokensFor> | undefined
+    const vocabularies = new Map<string, ReturnType<typeof colorTokensFor>>()
     const ownsColorTypo = (token: string, suggestion: string | null) => {
       if (!suggestion || isColor(suggestion)) return false
-      const value = colorValueOf(token)
-      if (!value) return true
-      declared ??= colorTokensFor(filename)
-      return !declared || !didYouMean(value, declared)
+      const parts = splitColorClass(token)
+      if (!parts) return true
+      // Judged against the tokens that prefix can name, the same set
+      // no-raw-colors uses, so the near-miss lands on one rule only.
+      let declared = vocabularies.get(parts.prefix)
+      if (declared === undefined) {
+        declared = colorTokensFor(filename, parts.prefix)
+        vocabularies.set(parts.prefix, declared)
+      }
+      return !declared || !didYouMean(parts.value, declared)
     }
 
     return classSiteVisitors(context, options, (site) => {

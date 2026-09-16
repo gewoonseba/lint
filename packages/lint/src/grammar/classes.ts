@@ -63,6 +63,53 @@ export function isArbitraryValue(token: string) {
 export const COLOR_PREFIX =
   /^(?:text-shadow|inset-shadow|inset-ring|drop-shadow|scrollbar-(?:thumb|track)|ring-offset|border(?:-[trblxyse]|-[bi][se])?|divide(?:-[xy])?|mask-(?:linear|radial|conic|[trblxy])-(?:from|to)|bg|text|ring|outline|fill|stroke|from|via|to|accent|caret|decoration|placeholder|shadow)-/
 
+// Where a color utility looks its value up. Tailwind tries the
+// utility's own theme namespace before --color-*, so
+// --background-color-surface makes bg-surface and nothing else: a token
+// declared there belongs to that utility, not to the whole palette.
+// From each utility's themeKeys in Tailwind v4; border sides, divide
+// and the gradient stops share their base utility's namespace.
+// test/color-namespaces.test.ts checks this against the installed
+// Tailwind and fails when a namespace is added or renamed.
+const COLOR_NAMESPACES: Record<string, readonly string[]> = {
+  bg: ["background-color"],
+  from: ["background-color"],
+  via: ["background-color"],
+  to: ["background-color"],
+  text: ["text-color"],
+  border: ["border-color"],
+  // divide-* reads its own namespace first, then the border's.
+  divide: ["divide-color", "border-color"],
+  outline: ["outline-color"],
+  ring: ["ring-color"],
+  "inset-ring": ["ring-color"],
+  "ring-offset": ["ring-offset-color"],
+  shadow: ["box-shadow-color"],
+  "inset-shadow": ["box-shadow-color"],
+  "text-shadow": ["text-shadow-color"],
+  "drop-shadow": ["drop-shadow-color"],
+  accent: ["accent-color"],
+  caret: ["caret-color"],
+  placeholder: ["placeholder-color"],
+  decoration: ["text-decoration-color"],
+  // fill, stroke and the scrollbar utilities read --color-* alone.
+}
+
+// Every scoped namespace, longest first, so reading a theme matches
+// the longest name: --text-decoration-color-x is not --text-color.
+export const COLOR_NAMESPACE_NAMES: readonly string[] = [
+  ...new Set(Object.values(COLOR_NAMESPACES).flat()),
+].sort((a, b) => b.length - a.length)
+
+// "border-t-" and "border-" read one namespace; a mask stop reads the
+// background's. Empty when the utility has no namespace of its own.
+export function colorNamespacesOf(prefix: string): readonly string[] {
+  const name = prefix.endsWith("-") ? prefix.slice(0, -1) : prefix
+  if (name.startsWith("mask-")) return COLOR_NAMESPACES.bg
+  const base = name.replace(/^(border|divide)-.+$/, "$1")
+  return COLOR_NAMESPACES[base] ?? []
+}
+
 const PALETTE = [
   "slate",
   "gray",

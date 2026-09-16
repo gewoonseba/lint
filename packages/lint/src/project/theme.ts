@@ -1,10 +1,12 @@
-// Reads what a project's Tailwind theme declares: the --color-* tokens
-// inside @theme, the scales, and the classes its CSS defines.
+// Reads what a project's Tailwind theme declares: the color tokens
+// inside @theme, universal and per-utility, the scales, and the classes
+// its CSS defines.
 // See docs/how-it-works.md.
 
 import * as fs from "node:fs"
 import * as path from "node:path"
 
+import { COLOR_NAMESPACE_NAMES, colorNamespacesOf } from "../grammar/classes"
 import { parseColor, type Lab } from "../grammar/colors"
 import { lengthInPx } from "../grammar/lengths"
 import { FONT_SIZES, RADII } from "../grammar/tailwind-theme"
@@ -19,6 +21,9 @@ type Declaration = { name: string; value: string; theme: boolean }
 
 type ThemeRead = {
   tokens: Set<string>
+  // Tokens declared in a utility's own namespace, by namespace:
+  // --background-color-surface is "surface" under "background-color".
+  scoped: Map<string, Set<string>>
   utilities: Set<string>
   classes: Set<string>
   // Every custom property the project declares, in light mode, last
@@ -33,6 +38,10 @@ type ThemeRead = {
   // Retried with the signature, so a corrected alias invalidates too.
   missingImports: { spec: string; fromDir: string; rootDir: string }[]
   colors?: Map<string, Lab>
+  // Per prefix, built on demand: the same Set each time, so the rules
+  // can memoize verdicts against it.
+  vocabularies?: Map<string, Set<string>>
+  prefixColors?: Map<string, Map<string, Lab>>
   scales?: Record<ScaleKind, Map<string, number>>
   spacing?: number | null
 }
@@ -44,33 +53,50 @@ const cache = new Map<
 
 export function parseColorTokens(css: string) {
   const tokens = new Set<string>()
-  applyColorTokens(css, tokens)
+  applyTokenDeclarations(parseDeclarations(css).declarations, tokens, new Map())
   return tokens
 }
 
-function applyColorTokens(css: string, tokens: Set<string>) {
-  applyTokenDeclarations(parseDeclarations(css).declarations, tokens)
+// The longest namespace a declaration names: "text-color-primary" is
+// "primary" under "text-color", never "color". Null for a name that
+// declares no color, so --text-sm stays a font size.
+function namespaceOf(name: string) {
+  for (const namespace of COLOR_NAMESPACE_NAMES) {
+    if (name.startsWith(`${namespace}-`)) return namespace
+  }
+  return name.startsWith("color-") ? "color" : null
 }
 
 // In cascade order: `--color-x: initial` drops x, `--color-*: initial`
-// and `--*: initial` drop everything declared so far.
+// drops the universal palette, `--background-color-*: initial` drops
+// that one namespace, and `--*: initial` drops everything so far.
 function applyTokenDeclarations(
   declarations: Declaration[],
-  tokens: Set<string>
+  tokens: Set<string>,
+  scoped: Map<string, Set<string>>
 ) {
   for (const { name, value, theme } of declarations) {
     if (!theme) continue
     const reset = value.trim() === "initial"
     if (name === "*") {
-      if (reset) tokens.clear()
+      if (reset) {
+        tokens.clear()
+        scoped.clear()
+      }
       continue
     }
-    if (!name.startsWith("color-")) continue
-    const token = name.slice("color-".length)
+    const namespace = namespaceOf(name)
+    if (!namespace) continue
+    const into =
+      namespace === "color"
+        ? tokens
+        : (scoped.get(namespace) ??
+          scoped.set(namespace, new Set()).get(namespace)!)
+    const token = name.slice(namespace.length + 1)
     if (token === "*") {
-      if (reset) tokens.clear()
-    } else if (reset) tokens.delete(token)
-    else tokens.add(token)
+      if (reset) into.clear()
+    } else if (reset) into.delete(token)
+    else into.add(token)
   }
 }
 
@@ -210,7 +236,7 @@ function readTheme(
   }
   if (!fromPackage) {
     const { values, themeNames, declarations } = parseDeclarations(css)
-    applyTokenDeclarations(declarations, read.tokens)
+    applyTokenDeclarations(declarations, read.tokens, read.scoped)
     for (const [name, value] of values) read.values.set(name, value)
     for (const name of themeNames) read.themeNames.add(name)
     read.declarations.push(...declarations)
@@ -237,6 +263,7 @@ function themeAt(cssFile: string) {
   }
   const read: ThemeRead = {
     tokens: new Set(),
+    scoped: new Map(),
     utilities: new Set(),
     classes: new Set(),
     values: new Map(),
@@ -309,7 +336,7 @@ export function discoverThemeFile(root: string) {
   for (const file of files.sort()) {
     const read = themeAt(file)
     if (!read.tailwind) continue
-    const tokens = read.tokens.size
+    const tokens = vocabularySize(read)
     const depth = path.relative(root, file).split(path.sep).length
     if (
       !best ||
@@ -348,25 +375,84 @@ export function themeFileFor(fromFile: string) {
   return discoverThemeFile(project.root)
 }
 
-export function colorTokensFor(fromFile: string) {
+function vocabularySize(read: ThemeRead) {
+  let size = read.tokens.size
+  for (const tokens of read.scoped.values()) size += tokens.size
+  return size
+}
+
+// What a utility with this prefix can name: the tokens in the
+// namespaces it reads, then the universal --color-* ones. The same Set
+// on every call, so a rule can memoize against it.
+function vocabularyOf(read: ThemeRead, prefix: string) {
+  read.vocabularies ??= new Map()
+  const cached = read.vocabularies.get(prefix)
+  if (cached) return cached
+  const namespaces = colorNamespacesOf(prefix)
+  let tokens = read.tokens
+  if (namespaces.some((namespace) => read.scoped.get(namespace)?.size)) {
+    tokens = new Set(read.tokens)
+    for (const namespace of namespaces) {
+      for (const token of read.scoped.get(namespace) ?? []) tokens.add(token)
+    }
+  }
+  read.vocabularies.set(prefix, tokens)
+  return tokens
+}
+
+// Null when the theme declares no colors at all: the rule has no
+// vocabulary to judge against and stays quiet. A prefix narrows the
+// answer to the namespaces that prefix reads.
+export function colorTokensFor(fromFile: string, prefix?: string) {
   const cssFile = themeFileFor(fromFile)
   if (!cssFile) return null
-  const { tokens } = themeAt(cssFile)
-  return tokens.size ? tokens : null
+  const read = themeAt(cssFile)
+  if (!vocabularySize(read)) return null
+  return prefix === undefined ? read.tokens : vocabularyOf(read, prefix)
 }
 
 // Empty when the values cannot be read (color-mix, JS-set variables).
-function colorsOf(read: ThemeRead) {
-  if (read.colors) return read.colors
-  const colors = new Map<string, Lab>()
-  for (const token of read.tokens) {
-    const raw = read.values.get(`color-${token}`)
+// A namespaced token is read from the name that declared it, so
+// --background-color-surface is found for bg-surface.
+function labsInto(
+  read: ThemeRead,
+  namespace: string,
+  tokens: Iterable<string>,
+  colors: Map<string, Lab>
+) {
+  for (const token of tokens) {
+    const raw = read.values.get(`${namespace}-${token}`)
     if (!raw) continue
     const resolved = resolveVariables(raw, read.values)
     const lab = resolved ? parseColor(resolved) : null
     if (lab) colors.set(token, lab)
   }
+}
+
+function colorsOf(read: ThemeRead) {
+  if (read.colors) return read.colors
+  const colors = new Map<string, Lab>()
+  labsInto(read, "color", read.tokens, colors)
   read.colors = colors
+  return colors
+}
+
+// The universal colors plus the ones this prefix's namespaces declare.
+// A scoped token wins: bg-surface is what --background-color-surface
+// says, whatever --color-surface might also say.
+function prefixColorsOf(read: ThemeRead, prefix: string) {
+  read.prefixColors ??= new Map()
+  const cached = read.prefixColors.get(prefix)
+  if (cached) return cached
+  const namespaces = colorNamespacesOf(prefix)
+  let colors = colorsOf(read)
+  if (namespaces.some((namespace) => read.scoped.get(namespace)?.size)) {
+    colors = new Map(colors)
+    for (const namespace of namespaces) {
+      labsInto(read, namespace, read.scoped.get(namespace) ?? [], colors)
+    }
+  }
+  read.prefixColors.set(prefix, colors)
   return colors
 }
 
@@ -428,11 +514,12 @@ export const DEFAULT_SCALES: Record<ScaleKind, Map<string, number>> = {
   text: defaultScale("text"),
 }
 
-export function colorValuesFor(fromFile: string) {
+export function colorValuesFor(fromFile: string, prefix?: string) {
   const cssFile = themeFileFor(fromFile)
   if (!cssFile) return null
   const read = themeAt(cssFile)
-  return read.tokens.size ? colorsOf(read) : null
+  if (!vocabularySize(read)) return null
+  return prefix === undefined ? colorsOf(read) : prefixColorsOf(read, prefix)
 }
 
 // Tailwind's 0.25rem unless the theme sets --spacing. Null when the theme

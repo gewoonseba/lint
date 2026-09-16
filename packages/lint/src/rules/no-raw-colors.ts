@@ -172,21 +172,54 @@ export const noRawColors = {
       }
     }
     const themeFor = () => (theme ??= readTheme())
-    let listed: string | undefined
-    const tokenList = () =>
-      (listed ??= themeFor().declared ? listTokens(themeFor().declared!) : "")
 
-    let colors: ReturnType<typeof colorValuesFor> | undefined
-    const suggestionColors = () => {
-      if (colors === undefined) {
-        colors = themeFor().declared ? colorValuesFor(filename) : null
+    // A utility names the tokens of the namespaces it reads, so bg- and
+    // text- can have different vocabularies in one theme. Held per
+    // prefix, since a file uses only a few.
+    const vocabularies = new Map<string, Set<string> | null>()
+    const vocabularyFor = (prefix: string) => {
+      let tokens = vocabularies.get(prefix)
+      if (tokens === undefined) {
+        tokens = themeFor().declared ? colorTokensFor(filename, prefix) : null
+        vocabularies.set(prefix, tokens)
       }
-      return colors
+      return tokens
+    }
+    // Empty means this utility has no theme colors, the way a theme
+    // with no tokens at all has none: nothing to judge a name against,
+    // and nothing to list.
+    const vocabularyOf = (token: string) => {
+      const prefix = splitColorClass(token)?.prefix
+      const tokens = prefix ? vocabularyFor(prefix) : themeFor().declared
+      return tokens?.size ? tokens : null
+    }
+
+    const listedFor = new Map<string, string>()
+    const tokenList = (token: string) => {
+      const prefix = splitColorClass(token)?.prefix ?? ""
+      let text = listedFor.get(prefix)
+      if (text === undefined) {
+        const tokens = vocabularyOf(token)
+        text = tokens ? listTokens(tokens) : ""
+        listedFor.set(prefix, text)
+      }
+      return text
+    }
+
+    const colors = new Map<string, ReturnType<typeof colorValuesFor>>()
+    const suggestionColors = (prefix?: string) => {
+      const key = prefix ?? ""
+      let values = colors.get(key)
+      if (values === undefined) {
+        values = themeFor().declared ? colorValuesFor(filename, prefix) : null
+        colors.set(key, values)
+      }
+      return values
     }
     const nearest = (token: string) => {
       const parts = splitColorClass(token)
       const lab = parts && paletteColor(parts.value)
-      const values = suggestionColors()
+      const values = parts && suggestionColors(parts.prefix)
       if (!parts || !lab || !values) return []
       return nearestColorTokens(lab, values, roleOf(parts.prefix)).map((name) =>
         withBase(token, `${parts.prefix}${name}${parts.opacity}`)
@@ -194,13 +227,14 @@ export const noRawColors = {
     }
 
     const paletteVerdict = (token: string): Verdict => {
-      const { declared, file } = themeFor()
-      if (!declared)
+      const { file } = themeFor()
+      if (!vocabularyOf(token))
         return { messageId: "paletteClass", data: { className: token } }
-      if (!suggestionColors()?.size) {
+      const prefix = splitColorClass(token)?.prefix
+      if (!suggestionColors(prefix)?.size) {
         return {
           messageId: "paletteClassListed",
-          data: { className: token, tokens: tokenList(), file },
+          data: { className: token, tokens: tokenList(token), file },
         }
       }
       const suggestions = nearest(token)
@@ -209,7 +243,7 @@ export const noRawColors = {
         data: {
           className: token,
           suggestions: suggestions.join(", "),
-          tokens: tokenList(),
+          tokens: tokenList(token),
           file,
         },
         replacements: suggestions,
@@ -228,8 +262,9 @@ export const noRawColors = {
     }
 
     const undeclaredVerdict = (token: string): Verdict => {
-      const { declared, file } = themeFor()
+      const { file } = themeFor()
       const parts = splitColorClass(token)
+      const declared = vocabularyOf(token)
       const meant = parts && declared ? didYouMean(parts.value, declared) : null
       if (!meant && isTypoOfAnotherUtility(token)) return null
       if (parts && meant) {
@@ -239,13 +274,18 @@ export const noRawColors = {
         )
         return {
           messageId: "undeclaredTokenTypo",
-          data: { className: token, suggestion, tokens: tokenList(), file },
+          data: {
+            className: token,
+            suggestion,
+            tokens: tokenList(token),
+            file,
+          },
           replacements: [suggestion],
         }
       }
       return {
         messageId: "undeclaredToken",
-        data: { className: token, tokens: tokenList(), file },
+        data: { className: token, tokens: tokenList(token), file },
       }
     }
 
@@ -253,10 +293,11 @@ export const noRawColors = {
       if (isArbitraryValue(token)) return null
       const { declared } = themeFor()
       const colorValue = colorValueOf(token)
-      // A palette name the theme declares is one of its tokens.
-      if (colorValue && declared?.has(colorValue)) return null
+      // A name the utility's own namespace declares is one of its
+      // tokens, and so is a palette name the theme redeclares.
+      if (colorValue && vocabularyOf(token)?.has(colorValue)) return null
       if (isPaletteClass(token)) return paletteVerdict(token)
-      if (!declared) return null
+      if (!declared || !vocabularyOf(token)) return null
       if (categoryOf(groupOf(token)) !== "color") return null
       if (!colorValue || NAMED.has(colorValue)) return null
       return undeclaredVerdict(token)

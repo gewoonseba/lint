@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+/* One token per scoped color namespace, named after it, so the drift
+   test can ask Tailwind which utilities read which namespace. */
+@theme {
+  --color-universal: oklch(0.5 0.1 250);
+  --background-color-backgroundcolor: oklch(0.5 0.1 250);
+  --text-color-textcolor: oklch(0.5 0.1 250);
+  --border-color-bordercolor: oklch(0.5 0.1 250);
+  --divide-color-dividecolor: oklch(0.5 0.1 250);
+  --outline-color-outlinecolor: oklch(0.5 0.1 250);
+  --ring-color-ringcolor: oklch(0.5 0.1 250);
+  --ring-offset-color-ringoffsetcolor: oklch(0.5 0.1 250);
+  --box-shadow-color-boxshadowcolor: oklch(0.5 0.1 250);
+  --text-shadow-color-textshadowcolor: oklch(0.5 0.1 250);
+  --drop-shadow-color-dropshadowcolor: oklch(0.5 0.1 250);
+  --accent-color-accentcolor: oklch(0.5 0.1 250);
+  --caret-color-caretcolor: oklch(0.5 0.1 250);
+  --placeholder-color-placeholdercolor: oklch(0.5 0.1 250);
+  --text-decoration-color-textdecorationcolor: oklch(0.5 0.1 250);
+}

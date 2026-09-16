@@ -63,11 +63,12 @@ built plugin through `jsPlugins` and skip when no build exists.
 
 Three parts of the linter need different updates:
 
-| Part                        | Source                                      | What to update                                                              |
-| --------------------------- | ------------------------------------------- | --------------------------------------------------------------------------- |
-| Class existence             | The project's Tailwind v4                   | Nothing in the linter; new classes are recognized when the project upgrades |
-| Class categories            | `cn` groups and `src/grammar/categories.ts` | Update `cn` and map new groups to categories                                |
-| Token and scale suggestions | Generated `src/grammar/tailwind-theme.ts`   | Regenerate from the Tailwind dev dependency                                 |
+| Part                        | Source                                         | What to update                                                              |
+| --------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------- |
+| Class existence             | The project's Tailwind v4                      | Nothing in the linter; new classes are recognized when the project upgrades |
+| Class categories            | `cn` groups and `src/grammar/categories.ts`    | Update `cn` and map new groups to categories                                |
+| Token and scale suggestions | Generated `src/grammar/tailwind-theme.ts`      | Regenerate from the Tailwind dev dependency                                 |
+| Color namespaces            | `COLOR_NAMESPACES` in `src/grammar/classes.ts` | Map a new color utility to the theme namespace it reads                     |
 
 Paths in this section are relative to `packages/lint`.
 
@@ -83,7 +84,12 @@ Paths in this section are relative to `packages/lint`.
 2. When `cn` adds the new class groups, update it and `BUNDLED_CN` in
    `src/grammar/classifier.ts`. Run tests and add missing entries to
    `GROUP_CATEGORY`. `test/options.test.ts` lists unmapped groups.
-3. Run `pnpm corpus:check` and inspect changes before updating the
+3. When Tailwind adds a color utility or renames a color namespace,
+   update `COLOR_NAMESPACES` and add a probe token to
+   `test/fixtures/namespace-probe`. `test/color-namespaces.test.ts`
+   asks the installed Tailwind about every utility/namespace pair and
+   fails when the map and Tailwind disagree.
+4. Run `pnpm corpus:check` and inspect changes before updating the
    baseline.
 
 An unknown class is `unclassified`, not layout. A recognized group without

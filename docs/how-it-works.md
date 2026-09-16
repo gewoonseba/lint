@@ -58,6 +58,26 @@ reads `--color-*` declarations in `@theme`:
 - `bg-zinc-100` is reported: it uses a raw palette color.
 - `bg-highlight` is reported: it names an undeclared token.
 
+It reads a utility's own color namespace too. Tailwind looks there
+before `--color-*`, so a token declared that way belongs to one utility:
+
+```css
+@theme {
+  --background-color-surface: var(--surface);
+  --text-color-muted: var(--muted);
+}
+```
+
+- `bg-surface` and `text-muted` are allowed.
+- `text-surface` is reported: Tailwind generates no CSS for it, because
+  `surface` is declared for backgrounds only.
+
+`--border-color-*`, `--divide-color-*`, `--outline-color-*`,
+`--ring-color-*` and the rest work the same way, and a reset such as
+`--background-color-*: initial` clears that namespace alone. Suggestions
+come from the namespaces the utility reads, so a raw background color is
+offered background tokens.
+
 Imported stylesheets can contribute tokens and custom utilities.
 Tailwind's built-in palette does not count as your project's declared
 tokens. See [no-raw-colors](./rules/no-raw-colors.md).

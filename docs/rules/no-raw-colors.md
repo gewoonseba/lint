@@ -34,6 +34,25 @@ The error lists theme tokens, suggests a nearby color or spelling
 correction, and names the theme file. Suggestions appear in the editor.
 Variants, opacity, and important markers are preserved in replacements.
 
+### Colors scoped to one utility
+
+A token declared in a utility's own namespace is that utility's alone,
+the way Tailwind reads it:
+
+```css
+@theme {
+  --background-color-surface: var(--surface);
+}
+```
+
+```tsx
+// Allowed.
+<div className="bg-surface">Account settings</div>
+
+// Reported: Tailwind generates no CSS for it.
+<div className="text-surface">Account settings</div>
+```
+
 `white`, `black`, `transparent`, `current`, and `inherit` are accepted
 color names. Arbitrary colors such as `bg-[#333]` belong to
 [no-arbitrary-values](./no-arbitrary-values.md).
@@ -156,9 +175,10 @@ Invalid entries produce a configuration error; see
 
 ## Limits
 
-- Tokens come from the [theme and its imports](../how-it-works.md#theme-tokens).
-  Without a readable theme, palette colors are still reported, but
-  undeclared tokens cannot be checked.
+- Tokens come from the [theme and its imports](../how-it-works.md#theme-tokens),
+  both `--color-*` and a utility's own namespace. Without a readable
+  theme, palette colors are still reported, but undeclared tokens cannot
+  be checked.
 - Color suggestions use resolved light-mode values. A nearby color is
   a suggestion, not a guarantee that it matches the design.
 - Variable references such as `bg-(--brand)` pass. This rule does not

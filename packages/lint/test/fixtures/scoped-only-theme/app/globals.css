@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+/* A theme with no universal palette at all: every color belongs to one
+   utility, and the utilities with no namespace have none. */
+@theme {
+  --background-color-surface: oklch(1 0 0);
+  --text-color-primary: oklch(0.21 0 0);
+}

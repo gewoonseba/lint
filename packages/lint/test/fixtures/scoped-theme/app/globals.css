@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+/* A theme that scopes most of its colors to one utility each. Tailwind
+   reads a utility's own namespace before --color-*, so bg-surface is a
+   class and text-surface is not. */
+@theme {
+  --color-brand: oklch(0.55 0.2 275);
+  --background-color-surface: oklch(1 0 0);
+  --background-color-inset: oklch(0.97 0 0);
+  --text-color-primary: oklch(0.21 0 0);
+  --text-color-secondary: oklch(0.55 0 0);
+  --border-color-default: oklch(0.87 0 0);
+  --divide-color-soft: oklch(0.93 0 0);
+  --ring-color-focus: oklch(0.55 0.2 275);
+  /* Dropped again, so a reset is scoped to its namespace too. */
+  --background-color-legacy: oklch(0.9 0 0);
+  --background-color-legacy: initial;
+}
