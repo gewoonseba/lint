@@ -53,6 +53,11 @@ the way Tailwind reads it:
 <div className="text-surface">Account settings</div>
 ```
 
+A name is only undeclared when your Tailwind generates no CSS for it,
+so a class the theme declares as something else -- a `--text-*` font
+size, a `--shadow-*` token, a custom `@utility` -- is left alone even
+though the class grammar files it under color.
+
 `white`, `black`, `transparent`, `current`, and `inherit` are accepted
 color names. Arbitrary colors such as `bg-[#333]` belong to
 [no-arbitrary-values](./no-arbitrary-values.md).
@@ -178,7 +183,8 @@ Invalid entries produce a configuration error; see
 - Tokens come from the [theme and its imports](../how-it-works.md#theme-tokens),
   both `--color-*` and a utility's own namespace. Without a readable
   theme, palette colors are still reported, but undeclared tokens cannot
-  be checked.
+  be checked. Without a working Tailwind, the declared namespaces answer
+  on their own.
 - Color suggestions use resolved light-mode values. A nearby color is
   a suggestion, not a guarantee that it matches the design.
 - Variable references such as `bg-(--brand)` pass. This rule does not

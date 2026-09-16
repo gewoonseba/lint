@@ -78,6 +78,12 @@ before `--color-*`, so a token declared that way belongs to one utility:
 come from the namespaces the utility reads, so a raw background color is
 offered background tokens.
 
+What the namespaces declare is what a message lists and suggests.
+Whether there is a finding at all rests on your Tailwind: a class it
+generates CSS for is declared somehow, so a name the theme gives a
+font size, a shadow or an `@utility` is not reported as a missing
+color. Without a working Tailwind, the namespaces answer alone.
+
 Imported stylesheets can contribute tokens and custom utilities.
 Tailwind's built-in palette does not count as your project's declared
 tokens. See [no-raw-colors](./rules/no-raw-colors.md).

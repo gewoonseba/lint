@@ -250,6 +250,19 @@ export const noRawColors = {
       }
     }
 
+    // The namespaces above decide what a message says; Tailwind decides
+    // whether there is a finding. A class it generates CSS for is
+    // declared somehow -- a namespace this version of the linter does
+    // not know, an @utility, a plugin -- so it is not an undeclared
+    // token, whatever the map says. Without the oracle, the map's
+    // answer stands on its own.
+    const generatesCss = (token: string) => {
+      const { themeFile } = themeFor()
+      if (!themeFile) return false
+      const asked = unknownClasses(themeFile, [token])
+      return asked !== null && asked.length === 0
+    }
+
     // cn's color groups take any value, so text-smal classifies as a
     // color here. When Tailwind's nearest real class is not a color, the
     // typo belongs to no-unknown-classes and this rule stays quiet, so
@@ -300,6 +313,7 @@ export const noRawColors = {
       if (!declared || !vocabularyOf(token)) return null
       if (categoryOf(groupOf(token)) !== "color") return null
       if (!colorValue || NAMED.has(colorValue)) return null
+      if (generatesCss(token)) return null
       return undeclaredVerdict(token)
     }
 

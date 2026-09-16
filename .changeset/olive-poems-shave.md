@@ -13,3 +13,8 @@ Each utility is now judged against the namespaces it actually reads, so
 `bg-surface` passes while `text-surface` is still reported — Tailwind
 generates no CSS for it. Resets are scoped too, and suggestions come
 from the namespaces the utility reads.
+
+A name is now only reported as undeclared when the project's Tailwind
+generates no CSS for it. A namespace this version does not know, a
+`--text-*` font size, a `--shadow-*` token or a custom `@utility` costs
+a less specific message rather than a wrong finding.
